@@ -1,0 +1,22 @@
+{
+  "name": "coloredcoins",
+  "version": "0.1.0",
+  "description": "Colored-Coins SDK for issuing and transferring digital assets on top of the Bitcoin blockchain",
+  "main": "src/coloredcoins.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "keywords": [
+    "colored-coins",
+    "bitcoin",
+    "blockchain"
+  ],
+  "author": "oleiba",
+  "license": "ISC",
+  "dependencies": {
+    "blockexplorer-rpc": "0.0.4",
+    "coloredcoins-rpc": "0.0.3",
+    "hdwallet": "^0.6.0",
+    "request": "^2.79.0"
+  }
+}
