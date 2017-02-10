@@ -4,7 +4,9 @@
   "description": "Colored-Coins SDK for issuing and transferring digital assets on top of the Bitcoin blockchain",
   "main": "src/coloredcoins.js",
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "coverage": "istanbul cover _mocha -- -R spec",
+    "coveralls": "cat ./coverage/lcov.info | coveralls"
   },
   "keywords": [
     "colored-coins",
