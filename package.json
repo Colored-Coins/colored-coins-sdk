@@ -18,5 +18,8 @@
     "coloredcoins-rpc": "0.0.3",
     "hdwallet": "^0.6.0",
     "request": "^2.79.0"
+  },
+  "devDependencies": {
+    "jsonfile": "^2.4.0"
   }
 }
