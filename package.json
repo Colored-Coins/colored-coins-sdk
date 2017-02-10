@@ -14,6 +14,7 @@
   "author": "oleiba",
   "license": "ISC",
   "dependencies": {
+    "async": "^2.1.4",
     "blockexplorer-rpc": "0.0.4",
     "coloredcoins-rpc": "0.0.3",
     "hdwallet": "^0.6.0",
