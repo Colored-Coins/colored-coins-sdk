@@ -1,9 +1,24 @@
 language: node_js
 node_js:
+- node
 - '4.6.1'
+env:
+- DB=redis
+- DB=none
+os:
+- linux
+- osx
+before_install:
+- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then git clone https://github.com/creationix/nvm.git /tmp/.nvm; fi
+- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then source /tmp/.nvm/nvm.sh; fi
+- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then nvm install $TRAVIS_NODE_VERSION; fi
+- if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then nvm use --delete-prefix $TRAVIS_NODE_VERSION; fi
+- if [[ "$TRAVIS_OS_NAME" == "osx" && "$DB" = 'redis' ]]; then brew update; fi
+- if [[ "$TRAVIS_OS_NAME" == "osx" && "$DB" = 'redis' ]]; then brew install redis; fi
 before_script:
 - npm install -g mocha
 - echo '{"network":"testnet", "privateSeed":"'$PRIVATE_SEED'"}' >> test/settings.json
+- if [[ "$DB" = 'redis' ]]; then redis-server; fi &
 after_script:
 - npm run coverage
 - npm run coveralls
