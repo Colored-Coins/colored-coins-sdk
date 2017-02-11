@@ -1,7 +1,7 @@
 # Colored-Coins SDK
 [![Build Status](https://travis-ci.org/Colored-Coins/colored-coins-sdk.svg?branch=badges)](https://travis-ci.org/Colored-Coins/colored-coins-sdk)
 [![Coverage Status](https://coveralls.io/repos/github/Colored-Coins/colored-coins-sdk/badge.svg?branch=badges)](https://coveralls.io/github/Colored-Coins/colored-coins-sdk?branch=badges)
-[![npm version](https://badge.fury.io/js/coloredcoins.svg)](http://badge.fury.io/js/coloredcoins)
+[![npm version](https://badge.fury.io/js/coloredcoins-sdk.svg)](http://badge.fury.io/js/coloredcoins-sdk)
 
 [![Standard - JavaScript Style Guide](https://cdn.rawgit.com/feross/standard/master/badge.svg)](https://github.com/feross/standard)
 
