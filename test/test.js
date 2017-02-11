@@ -34,8 +34,7 @@ describe('Test ColoredCoins SDK', function () {
     }
     // read from command line arguments
     cc = new ColoredCoins(settings)
-    cc.on('connect', done)
-    cc.init()
+    cc.init(done)
   })
 
   it('should create an issuance transaction', function (done) {
