@@ -23,7 +23,7 @@ describe('Test ColoredCoins SDK', function () {
   }
 
   before(function (done) {
-    this.timeout(30000)
+    this.timeout(15000)
     var settings
     try {
       settings = jf.readFileSync(path.join(__dirname, '/settings.json'))
