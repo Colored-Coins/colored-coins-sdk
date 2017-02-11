@@ -1,7 +1,7 @@
 {
-  "name": "coloredcoins",
+  "name": "coloredcoins-sdk",
   "version": "0.1.0",
-  "description": "Colored-Coins SDK for issuing and transferring digital assets on top of the Bitcoin blockchain",
+  "description": "Colored-Coins SDK for issuing and transferring digital assets using blockchain technology",
   "main": "src/coloredcoins.js",
   "scripts": {
     "test": "mocha",
