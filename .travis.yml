@@ -1,0 +1,12 @@
+sudo: required
+language: node_js
+node_js:
+- '4.6.1'
+before_script:
+- npm install -g istanbul
+- npm install -g mocha
+- npm install -g coveralls
+- echo '{"network":"testnet", "privateSeed":"'$PRIVATE_SEED'"}' >> test/settings.json
+after_script:
+- npm run coverage
+- npm run coveralls

@@ -1,6 +1,8 @@
 /* eslint-env mocha */
 var ColoredCoins = require('..')
 var assert = require('assert')
+var jf = require('jsonfile')
+var path = require('path')
 
 describe('Test ColoredCoins SDK', function () {
   var cc
@@ -24,17 +26,15 @@ describe('Test ColoredCoins SDK', function () {
     this.timeout(15000)
     var settings
     try {
-      settings = require('./settings')
+      settings = jf.readFileSync(path.join(__dirname, '/settings.json'))
     } catch (e) {
       settings = {
-        network: 'testnet',
-        events: true
+        network: 'testnet'
       }
     }
     // read from command line arguments
     cc = new ColoredCoins(settings)
-    cc.on('connect', done)
-    cc.init()
+    cc.init(done)
   })
 
   it('should create an issuance transaction', function (done) {
@@ -290,6 +290,7 @@ describe('Test ColoredCoins SDK', function () {
 
   it('should receive a \'newTransaction\' event when eventsSecure = true', function (done) {
     this.timeout(15000)
+    cc.events = true
     cc.eventsSecure = true
 
     var txids = []
