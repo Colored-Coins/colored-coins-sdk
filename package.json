@@ -14,7 +14,7 @@
     "blockchain"
   ],
   "author": "oleiba",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "async": "^2.1.4",
     "blockexplorer-rpc": "^0.0.4",
