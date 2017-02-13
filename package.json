@@ -6,7 +6,7 @@
   "scripts": {
     "test": "mocha",
     "browserify": "browserify --im -it=mkpath -e src/coloredcoins.js -o client/coloredcoins.client.js",
-    "babel": "babel client -d client",
+    "babel": "babel client/coloredcoins.client.js -o client/coloredcoins.client.js",
     "uglify": "uglifyjs client/coloredcoins.client.js -o client/coloredcoins.client.min.js",
     "coverage": "istanbul cover _mocha -- -R spec",
     "coveralls": "cat ./coverage/lcov.info | coveralls",
