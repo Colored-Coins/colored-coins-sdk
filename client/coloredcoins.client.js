@@ -1,6 +1,12 @@
 "use strict";
 
-var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+var _typeof2 = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
+
+var _typeof = typeof Symbol === "function" && _typeof2(Symbol.iterator) === "symbol" ? function (obj) {
+  return typeof obj === "undefined" ? "undefined" : _typeof2(obj);
+} : function (obj) {
+  return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj === "undefined" ? "undefined" : _typeof2(obj);
+};
 
 (function e(t, n, r) {
   function s(o, u) {
@@ -75573,8 +75579,8 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
                 len = input[next + copy++];
                 /* use constant limit because in js we should not preallocate memory */
                 if (state.head && len && state.length < 65536 /*state.head.name_max*/) {
-                  state.head.name += String.fromCharCode(len);
-                }
+                    state.head.name += String.fromCharCode(len);
+                  }
               } while (len && copy < have);
 
               if (state.flags & 0x0200) {
@@ -75601,8 +75607,8 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
                 len = input[next + copy++];
                 /* use constant limit because in js we should not preallocate memory */
                 if (state.head && len && state.length < 65536 /*state.head.comm_max*/) {
-                  state.head.comment += String.fromCharCode(len);
-                }
+                    state.head.comment += String.fromCharCode(len);
+                  }
               } while (len && copy < have);
               if (state.flags & 0x0200) {
                 state.check = crc32(state.check, input, copy, next);
@@ -79507,7 +79513,8 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
 
         /** Highest positive signed 32-bit float value */
         maxInt = 2147483647,
-            // aka. 0x7FFFFFFF or 2^31-1
+
+        // aka. 0x7FFFFFFF or 2^31-1
 
         /** Bootstring parameters */
         base = 36,
@@ -79517,16 +79524,20 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
             damp = 700,
             initialBias = 72,
             initialN = 128,
-            // 0x80
+
+        // 0x80
         delimiter = '-',
-            // '\x2D'
+
+        // '\x2D'
 
         /** Regular expressions */
         regexPunycode = /^xn--/,
             regexNonASCII = /[^\x20-\x7E]/,
-            // unprintable ASCII chars + non-ASCII chars
+
+        // unprintable ASCII chars + non-ASCII chars
         regexSeparators = /[\x2E\u3002\uFF0E\uFF61]/g,
-            // RFC 3490 separators
+
+        // RFC 3490 separators
 
         /** Error messages */
         errors = {
@@ -79739,6 +79750,7 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
               digit,
               t,
 
+
           /** Cached calculation results */
           baseMinusT;
 
@@ -79836,8 +79848,10 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
               currentValue,
               output = [],
 
+
           /** `inputLength` will hold the number of code points in `input`. */
           inputLength,
+
 
           /** Cached calculation results */
           handledCPCountPlusOne,
@@ -102995,6 +103009,7 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
     // Allowed by RFCs, but cause of XSS attacks.  Always escape these.
     autoEscape = ['\''].concat(unwise),
 
+
     // Characters that are never ever allowed in a hostname.
     // Note that any invalid chars are also handled, but these
     // are the ones that are *expected* to be seen, so we fast-path
@@ -103005,17 +103020,20 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
         hostnamePartPattern = /^[+a-z0-9A-Z_-]{0,63}$/,
         hostnamePartStart = /^([+a-z0-9A-Z_-]{0,63})(.*)$/,
 
+
     // protocols that can allow "unsafe" and "unwise" chars.
     unsafeProtocol = {
       'javascript': true,
       'javascript:': true
     },
 
+
     // protocols that never have a hostname.
     hostlessProtocol = {
       'javascript': true,
       'javascript:': true
     },
+
 
     // protocols that always contain a // bit.
     slashedProtocol = {
