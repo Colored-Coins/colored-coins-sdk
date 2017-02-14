@@ -5,7 +5,7 @@
   "main": "src/coloredcoins.js",
   "scripts": {
     "test": "mocha",
-    "browserify": "browserify --im -it=mkpath -e src/coloredcoins.js -o client/coloredcoins.client.js",
+    "browserify": "browserify --ignore-missing -it=mkpath --standalone ColoredCoins --entry src/coloredcoins.js --outfile client/coloredcoins.client.js",
     "babel": "babel client/coloredcoins.client.js -o client/coloredcoins.client.js",
     "uglify": "uglifyjs client/coloredcoins.client.js -o client/coloredcoins.client.min.js",
     "coverage": "istanbul cover _mocha -- -R spec",
