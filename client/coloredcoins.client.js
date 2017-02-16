@@ -105263,7 +105263,7 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
         }], callback);
       };
 
-      ColoredCoins.prototype.getAssets = function (callback) {
+      ColoredCoins.prototype.getUtxos = function (callback) {
         var self = this;
         async.waterfall([function (cb) {
           self.hdwallet.getAddresses(cb);
@@ -105271,26 +105271,40 @@ var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol
           self.blockexplorer.post('getaddressesutxos', { addresses: addresses }, cb);
         }], function (err, addressesUtxos) {
           if (err) return callback(err);
-          var assets = [];
+          var utxosTxidsAndIndexes = {};
+          var utxos = [];
           addressesUtxos.forEach(function (addressUtxos) {
-            if (addressUtxos.utxos) {
-              addressUtxos.utxos.forEach(function (utxo) {
-                if (utxo.assets) {
-                  utxo.assets.forEach(function (asset, i) {
-                    assets.push({
-                      address: addressUtxos.address,
-                      txid: utxo.txid,
-                      index: utxo.index,
-                      assetId: asset.assetId,
-                      amount: asset.amount,
-                      issueTxid: asset.issueTxid,
-                      divisibility: asset.divisibility,
-                      lockStatus: asset.lockStatus,
-                      aggregationPolicy: asset.aggregationPolicy,
-                      assetIndex: i
-                    });
-                  });
-                }
+            addressUtxos.utxos.forEach(function (utxo) {
+              // ensure no duplications (multisig utxos may appear in more than one address-utxos pair)
+              if (!utxosTxidsAndIndexes[utxo.txid + ':' + utxo.index]) {
+                utxos.push(utxo);
+                utxosTxidsAndIndexes[utxo.txid + ':' + utxo.index] = true;
+              }
+            });
+          });
+          callback(null, utxos);
+        });
+      };
+
+      ColoredCoins.prototype.getAssets = function (callback) {
+        this.getUtxos(function (err, utxos) {
+          if (err) return callback(err);
+          var assets = [];
+          utxos.forEach(function (utxo) {
+            if (utxo.assets) {
+              utxo.assets.forEach(function (asset, i) {
+                assets.push({
+                  address: utxo.scriptPubKey.addresses[0],
+                  txid: utxo.txid,
+                  index: utxo.index,
+                  assetId: asset.assetId,
+                  amount: asset.amount,
+                  issueTxid: asset.issueTxid,
+                  divisibility: asset.divisibility,
+                  lockStatus: asset.lockStatus,
+                  aggregationPolicy: asset.aggregationPolicy,
+                  assetIndex: i
+                });
               });
             }
           });
