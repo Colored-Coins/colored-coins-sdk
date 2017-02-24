@@ -231,11 +231,30 @@ describe('Test ColoredCoins SDK', function () {
     })
   })
 
+  it('should get all utxos in wallet', function (done) {
+    this.timeout(15000)
+    cc.getUtxos(function (err, res) {
+      assert.ifError(err)
+      assert(Array.isArray(res) && res.length)
+      res.forEach(elem => {
+        assert(elem.txid)
+        assert(typeof elem.index !== 'undefined')
+        assert(elem.blockheight)
+        assert(elem.value)
+        assert(elem.scriptPubKey)
+        assert(elem.scriptPubKey.asm)
+        assert(elem.scriptPubKey.hex)
+        assert(elem.scriptPubKey.addresses)
+      })
+      done()
+    })
+  })
+
   it('should get assets in wallet', function (done) {
     this.timeout(15000)
     cc.getAssets(function (err, res) {
       assert.ifError(err)
-      assert(Array.isArray(res))
+      assert(Array.isArray(res) && res.length)
       res.forEach(elem => {
         assert(elem.txid)
         assert(typeof elem.index !== 'undefined')

@@ -203,7 +203,7 @@ ColoredCoins.prototype.burnAsset = function (args, callback) {
   callback)
 }
 
-ColoredCoins.prototype.getAssets = function (callback) {
+ColoredCoins.prototype.getUtxos = function (callback) {
   var self = this
   async.waterfall([
     function (cb) {
@@ -215,26 +215,40 @@ ColoredCoins.prototype.getAssets = function (callback) {
   ],
   function (err, addressesUtxos) {
     if (err) return callback(err)
+    var utxosTxidsAndIndexes = {}
+    var utxos = []
+    addressesUtxos.forEach(addressUtxos => {
+      addressUtxos.utxos.forEach(utxo => {
+        // ensure no duplications (multisig utxos may appear in more than one address-utxos pair)
+        if (!utxosTxidsAndIndexes[utxo.txid + ':' + utxo.index]) {
+          utxos.push(utxo)
+          utxosTxidsAndIndexes[utxo.txid + ':' + utxo.index] = true
+        }
+      })
+    })
+    callback(null, utxos)
+  })
+}
+
+ColoredCoins.prototype.getAssets = function (callback) {
+  this.getUtxos((err, utxos) => {
+    if (err) return callback(err)
     var assets = []
-    addressesUtxos.forEach(function (addressUtxos) {
-      if (addressUtxos.utxos) {
-        addressUtxos.utxos.forEach(function (utxo) {
-          if (utxo.assets) {
-            utxo.assets.forEach(function (asset, i) {
-              assets.push({
-                address: addressUtxos.address,
-                txid: utxo.txid,
-                index: utxo.index,
-                assetId: asset.assetId,
-                amount: asset.amount,
-                issueTxid: asset.issueTxid,
-                divisibility: asset.divisibility,
-                lockStatus: asset.lockStatus,
-                aggregationPolicy: asset.aggregationPolicy,
-                assetIndex: i
-              })
-            })
-          }
+    utxos.forEach(function (utxo) {
+      if (utxo.assets) {
+        utxo.assets.forEach(function (asset, i) {
+          assets.push({
+            address: utxo.scriptPubKey.addresses[0],
+            txid: utxo.txid,
+            index: utxo.index,
+            assetId: asset.assetId,
+            amount: asset.amount,
+            issueTxid: asset.issueTxid,
+            divisibility: asset.divisibility,
+            lockStatus: asset.lockStatus,
+            aggregationPolicy: asset.aggregationPolicy,
+            assetIndex: i
+          })
         })
       }
     })
