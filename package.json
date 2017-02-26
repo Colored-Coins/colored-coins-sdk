@@ -24,7 +24,7 @@
     "async": "^2.1.4",
     "blockexplorer-rpc": "^0.0.4",
     "coloredcoins-rpc": "^0.1.0",
-    "hdwallet": "^0.6.0",
+    "hdwallet": "^0.7.1",
     "request": "^2.79.0"
   },
   "devDependencies": {
