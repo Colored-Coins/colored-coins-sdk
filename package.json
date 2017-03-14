@@ -19,7 +19,7 @@
     "blockchain"
   ],
   "author": "oleiba",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "async": "^2.1.4",
     "blockexplorer-rpc": "^0.0.4",
