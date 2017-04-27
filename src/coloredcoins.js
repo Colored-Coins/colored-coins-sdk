@@ -42,6 +42,8 @@ util.inherits(ColoredCoins, events.EventEmitter)
 ColoredCoins.encryptPrivateKey = HDWallet.encryptPrivateKey
 ColoredCoins.decryptPrivateKey = HDWallet.decryptPrivateKey
 ColoredCoins.createNewKey = HDWallet.createNewKey
+ColoredCoins.generateMnemonic = HDWallet.generateMnemonic
+ColoredCoins.validateMnemonic = HDWallet.validateMnemonic
 
 ColoredCoins.prototype.init = function (cb) {
   var self = this
