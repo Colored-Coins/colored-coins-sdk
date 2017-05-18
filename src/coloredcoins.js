@@ -3,7 +3,6 @@ var async = require('async')
 var events = require('events')
 var request = require('request')
 var HDWallet = require('hdwallet')
-var bitcoin = require('bitcoinjs-lib')
 var ColoredCoinsRpc = require('coloredcoins-rpc')
 var BlockExplorerRpc = require('blockexplorer-rpc')
 var ColoredCoinsBuilder = require('cc-transaction-builder')
@@ -61,6 +60,8 @@ util.inherits(ColoredCoins, events.EventEmitter)
 ColoredCoins.encryptPrivateKey = HDWallet.encryptPrivateKey
 ColoredCoins.decryptPrivateKey = HDWallet.decryptPrivateKey
 ColoredCoins.createNewKey = HDWallet.createNewKey
+ColoredCoins.generateMnemonic = HDWallet.generateMnemonic
+ColoredCoins.validateMnemonic = HDWallet.validateMnemonic
 
 ColoredCoins.prototype.init = function (cb) {
   var self = this
