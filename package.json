@@ -23,9 +23,13 @@
   "dependencies": {
     "async": "^2.1.4",
     "blockexplorer-rpc": "^0.0.4",
+    "cc-transaction-builder": "^0.1.2",
     "coloredcoins-rpc": "^0.1.0",
     "hdwallet": "^0.7.1",
-    "request": "^2.79.0"
+    "node-rest-client": "2.5.0",
+    "node-rsa": "^0.2.24",
+    "request": "^2.79.0",
+    "socket.io-client": "^2.0.1"
   },
   "devDependencies": {
     "babel-cli": "^6.22.2",

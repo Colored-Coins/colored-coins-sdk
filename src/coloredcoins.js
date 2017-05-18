@@ -9,12 +9,15 @@ var BlockExplorerRpc = require('blockexplorer-rpc')
 var ColoredCoinsBuilder = require('cc-transaction-builder')
 var BlockExplorer = require('../lib/block_explorer')
 var FullNode = require('../lib/full_node')
+var MetadataServer = require('../lib/metadata_server')
 
 var mainnetColoredCoinsHost = 'https://api.coloredcoins.org/v3'
 var testnetColoredCoinsHost = 'https://testnet.api.coloredcoins.org/v3'
 
 var mainnetBlockExplorerHost = 'https://explorer.coloredcoins.org'
 var testnetBlockExplorerHost = 'https://testnet.explorer.coloredcoins.org'
+
+var metadataServerHost = 'https://prod-metadata.coloredcoins.org'
 
 var verifierPath = 'https://www.coloredcoins.org/explorer/verify/api.php'
 
@@ -33,9 +36,13 @@ var ColoredCoins = function (settings) {
   self.blockexplorer = new BlockExplorerRpc(settings.blockExplorerHost)
   if (settings.fullNodeHost) {
     self.chainAdapter = new FullNode({ host: settings.fullNodeHost })
+    self.usingFullNode = true
   } else {
     self.chainAdapter = new BlockExplorer({ host: settings.blockExplorerHost })
   }
+
+  self.metadataServer = new MetadataServer({ host: settings.metadataServerHost || metadataServerHost })
+
   self.redisPort = settings.redisPort || 6379
   self.redisHost = settings.redisHost || '127.0.0.1'
   self.redisUrl = settings.redisUrl
@@ -91,32 +98,42 @@ ColoredCoins.prototype.init = function (cb) {
 }
 
 ColoredCoins.prototype.buildTransaction = function (type, ccArgs, callback) {
+  var self = this
+
   var functionName
 
   ccArgs.flags = ccArgs.flags || {}
   ccArgs.flags.injectPreviousOutput = true
   ccArgs.flags.splitChange = typeof ccArgs.flags.splitChange !== 'undefined' ? ccArgs.flags.splitChange : true
-  var tx
-  try {
-    if (type === 'send') {
-      tx = this.ccb.buildSendTransaction(ccArgs)
-    } else if (type === 'burn') {
-      tx = this.ccb.buildBurnTransaction(ccArgs)
-    } else if (type === 'issue') {
-      tx = this.ccb.buildIssueTransaction(ccArgs)
-    } else {
-      return callback('Unknown type.')
+
+  self.metadataServer.upload(ccArgs, function(err, ccArgs) {
+    if(err) return callback(err)
+    var tx
+    try {
+      if (type === 'send') {
+        tx = self.ccb.buildSendTransaction(ccArgs)
+      } else if (type === 'burn') {
+        tx = self.ccb.buildBurnTransaction(ccArgs)
+      } else if (type === 'issue') {
+        tx = self.ccb.buildIssueTransaction(ccArgs)
+      } else {
+        return callback('Unknown type.')
+      }
+    } catch (err) {
+      return callback(err)
     }
-  } catch (err) {
-    return callback(err)
-  }
-  return callback(null, tx)
+    tx.sha1 = ccArgs.sha1
+    return callback(null, tx)
+  })
 }
 
 ColoredCoins.prototype.signAndTransmit = function (assetInfo, callback) {
   var self = this
   async.waterfall([
-    function (cb) {
+    function(cb) {
+      self.metadataServer.seed(assetInfo.sha1, cb)
+    },
+    function (data, cb) {
       self.sign(assetInfo.txHex, cb)
     },
     function (signedTxHex, cb) {
@@ -461,33 +478,29 @@ ColoredCoins.prototype.on = function (eventKey, callback) {
 }
 
 ColoredCoins.prototype.onRevertedTransaction = function (callback) {
-  this.blockexplorer.on('revertedtransaction', function (data) {
-    callback(data.revertedtransaction)
-  })
-  this.blockexplorer.join('revertedtransaction')
+  this.chainAdapter.onRevertedTransaction(callback)
+  this.chainAdapter.joinRevertedTransaction()
 }
 
 ColoredCoins.prototype.onRevertedCCTransaction = function (callback) {
-  this.blockexplorer.on('revertedcctransaction', function (data) {
-    callback(data.revertedcctransaction)
-  })
-  this.blockexplorer.join('revertedcctransaction')
+  this.chainAdapter.onRevertedCCTransaction(callback)
+  this.chainAdapter.joinRevertedCCTransaction()
 }
 
 ColoredCoins.prototype.onNewTransaction = function (callback) {
   var self = this
 
   if (!self.events) return
-  if (self.eventsSecure || self.allTransactions) {
-    self.blockexplorer.on('newtransaction', function (data) {
-      if (isLocalTransaction(self.addresses, data.newtransaction)) {
+  if (self.usingFullNode || self.eventsSecure || self.allTransactions) {
+    self.chainAdapter.onNewTransaction(function (data) {
+      if (isLocalTransaction(self.addresses, data)) {
         self.hdwallet.discover()
-        callback(data.newtransaction)
+        callback(data)
       } else if (self.allTransactions) {
-        callback(data.newtransaction)
+        callback(data)
       }
     })
-    self.blockexplorer.join('newtransaction')
+    this.chainAdapter.joinNewTransaction()
   } else {
     var addresses = []
     var transactions = []
@@ -504,16 +517,16 @@ ColoredCoins.prototype.onNewCCTransaction = function (callback) {
   var self = this
 
   if (!self.events) return false
-  if (self.eventsSecure || self.allTransactions) {
-    self.blockexplorer.on('newcctransaction', function (data) {
-      if (isLocalTransaction(self.addresses, data.newcctransaction)) {
+  if (self.usingFullNode || self.eventsSecure || self.allTransactions) {
+    self.chainAdapter.onNewCCTransaction(function (data) {
+      if (isLocalTransaction(self.addresses, data)) {
         self.hdwallet.discover()
-        callback(data.newcctransaction)
+        callback(data)
       } else if (self.allTransactions) {
-        callback(data.newcctransaction)
+        callback(data)
       }
     })
-    self.blockexplorer.join('newcctransaction')
+    this.chainAdapter.joinNewCCTransaction()
   } else {
     self.onNewTransaction(function (transaction) {
       if (transaction.colored) {
@@ -642,7 +655,10 @@ ColoredCoins.prototype.getIssuedAssets = function (transactions, callback) {
 }
 
 ColoredCoins.prototype.getAddressInfo = function (address, cb) {
-  this.cc.get('addressinfo', [address], cb)
+  this._getUtxosForAddresses([address], function(err, data) {
+    if (err) return cb(err)
+    cb(null, { 'address': address, 'utxos': data})
+  })
 }
 
 ColoredCoins.prototype.getStakeHolders = function (assetId, numConfirmations, cb) {
@@ -650,7 +666,7 @@ ColoredCoins.prototype.getStakeHolders = function (assetId, numConfirmations, cb
     cb = numConfirmations
     numConfirmations = 0
   }
-  this.cc.get('stakeholders', [assetId, numConfirmations], cb)
+  this.blockexplorer.get('getassetholders', { 'assetId': assetId, 'confirmations': numConfirmations }, cb)
 }
 
 ColoredCoins.prototype.verifyIssuer = function (assetId, json, cb) {
