@@ -92,8 +92,10 @@ ColoredCoins.prototype.init = function (cb) {
           return handleError(err)
         }
       })
-      self.emit('connect')
-      if (cb) cb()
+      self.chainAdapter.onConnect(self.blockexplorer, function() {
+        self.emit('connect')
+        if (cb) cb()
+      })
     })
   })
 }
@@ -473,6 +475,8 @@ ColoredCoins.prototype.on = function (eventKey, callback) {
       return this.onRevertedTransaction(callback)
     case 'revertedCCTransaction':
       return this.onRevertedCCTransaction(callback)
+    case 'scanProgress':
+      return this.onProgress(callback)
     default:
       return this.blockexplorer.on.call(this, eventKey, callback)
   }
@@ -535,6 +539,10 @@ ColoredCoins.prototype.onNewCCTransaction = function (callback) {
       }
     })
   }
+}
+
+ColoredCoins.prototype.onProgress = function(callback) {
+  this.chainAdapter.onProgress(this.blockexplorer, callback)
 }
 
 var isLocalTransaction = function (addresses, transaction) {
