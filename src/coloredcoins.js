@@ -2,6 +2,7 @@ var util = require('util')
 var async = require('async')
 var events = require('events')
 var request = require('request')
+var debug = require('debug')('coloredcoins-sdk')
 var HDWallet = require('hdwallet')
 var ColoredCoinsRpc = require('coloredcoins-rpc')
 var BlockExplorerRpc = require('blockexplorer-rpc')
@@ -164,27 +165,23 @@ ColoredCoins.prototype.issueAsset = function (args, callback) {
 
   var transmit = args.transmit !== false
   args.transfer = args.transfer || []
+  if (!args.issueAddress) {
+    callback(new Error('Must have "issueAddress"'))
+  }
   var hdwallet = self.hdwallet
 
   var assetInformation
 
   async.waterfall([
     function (cb) {
-      if (args.issueAddress) {
-        self._getUtxosForAddresses([args.issueAddress], function(err, utxos) {
-          if (err) {
-            return cb(err)
-          } else {
-            args.utxos = utxos
-            return cb()
-          }
-        })
-      } else {
-        var privateKey = hdwallet.getPrivateKey(args.accountIndex)
-        var publicKey = privateKey.pub
-        args.issueAddress = publicKey.getAddress(self.network).toString()
-        return cb()
-      }
+      self._getUtxosForAddresses([args.issueAddress], function(err, utxos) {
+        if (err) {
+          return cb(err)
+        } else {
+          args.utxos = utxos
+          return cb()
+        }
+      })
     },
     function (cb) {
       self.buildTransaction('issue', args, cb)
@@ -228,11 +225,32 @@ ColoredCoins.prototype.sendAsset = function (args, callback) {
           }
         })
       } else if (args.sendutxo && Array.isArray(args.sendutxo) && args.sendutxo.length) {
-        args.utxos = args.sendutxo
-        delete args.sendutxo
-        return cb()
+        var objectUtxos = args.sendutxo.filter(utxo => typeof utxo === 'object')
+        if (objectUtxos.length === args.sendutxo.length) {
+          // 'sendutxo' is given as a UTXO object array, no need to fetch by txid:index
+          args.utxos = args.sendutxo
+          delete args.sendutxo
+          return cb()
+        }
+        var stringUtxos = args.sendutxo.filter(utxo => typeof utxo === 'string')
+        debug('stringUtxos', stringUtxos)
+        var txidsIndexes = stringUtxos.map(utxo => {
+          var utxoParts = utxo.split(':')
+          return {
+            txid: utxoParts[0],
+            index: utxoParts[1]
+          }
+        })
+        debug('txidsIndexes', txidsIndexes)
+        self.chainAdapter.getUtxos(txidsIndexes, function (err, populatedObjectUtxos) {
+          if (err) return cb(err)
+          debug('populatedObjectUtxos', populatedObjectUtxos)
+          args.utxos = objectUtxos.concat(populatedObjectUtxos)
+          delete args.sendutxo
+          return cb()
+        })
       } else {
-        return cb('Should have from as array of addresses or sendutxo as array of utxos.')
+        return cb('Must have "from" as array of addresses or "sendutxo" as array of utxos.')
       }
     },
     function (cb) {
