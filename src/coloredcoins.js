@@ -67,7 +67,7 @@ ColoredCoins.prototype.init = function (cb) {
   var self = this
 
   function handleError (err) {
-    self.emit('error')
+    self.emit('error', err)
     if (cb) return cb(err)
   }
 
