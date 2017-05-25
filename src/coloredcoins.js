@@ -108,6 +108,7 @@ ColoredCoins.prototype.buildTransaction = function (type, ccArgs, callback) {
 
   ccArgs.flags = ccArgs.flags || {}
   ccArgs.flags.injectPreviousOutput = true
+  ccArgs.financeChangeAddress = ccArgs.financeChangeAddress || self.hdwallet.getAddress()
   ccArgs.flags.splitChange = typeof ccArgs.flags.splitChange !== 'undefined' ? ccArgs.flags.splitChange : true
 
   self.metadataServer.upload(ccArgs, function(err, ccArgs) {
@@ -166,7 +167,7 @@ ColoredCoins.prototype.issueAsset = function (args, callback) {
   var transmit = args.transmit !== false
   args.transfer = args.transfer || []
   if (!args.issueAddress) {
-    callback(new Error('Must have "issueAddress"'))
+    return callback(new Error('Must have "issueAddress"'))
   }
   var hdwallet = self.hdwallet
 

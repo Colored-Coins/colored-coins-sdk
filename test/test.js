@@ -22,6 +22,8 @@ describe('Test ColoredCoins SDK', function () {
     }
   }
 
+  var issuanceUtxo
+
   before(function (done) {
     this.timeout(15000)
     var settings
@@ -132,9 +134,9 @@ describe('Test ColoredCoins SDK', function () {
 
   it('should get address info', function (done) {
     this.timeout(15000)
-    cc.getAddressInfo(fromAddress, function (err, ans) {
+    cc.getAddressInfo(cc.hdwallet.getAddress(0, 0), function (err, ans) {
       assert.ifError(err)
-      assert.equal(ans.address, fromAddress)
+      assert.equal(ans.address, cc.hdwallet.getAddress(0, 0))
       assert(Array.isArray(ans.utxos))
       assert(ans.utxos.length)
       done()
@@ -148,18 +150,6 @@ describe('Test ColoredCoins SDK', function () {
       assert.equal(ans.assetId, assetId)
       assert(Array.isArray(ans.holders))
       assert(ans.holders.length)
-      done()
-    })
-  })
-
-  it('should get assetmetadata', function (done) {
-    this.timeout(15000)
-    cc.getAssetMetadata(assetId, utxo, function (err, ans) {
-      assert.ifError(err)
-      assert.equal(ans.assetId, assetId)
-      assert.equal(ans.assetName, expectedAssetName)
-      assert.equal(typeof ans.issuanceTxid, 'string')
-      assert(ans.issuanceTxid.length)
       done()
     })
   })
@@ -183,7 +173,7 @@ describe('Test ColoredCoins SDK', function () {
     var issueAddress = cc.hdwallet.getAddress()
     cc._getUtxosForAddresses([issueAddress], function(err, utxos) {
       assert.ifError(err)
-      cc.issueAsset({ amount: 36, issueAddres: issueAddress, fee: 1000, utxos: utxos }, function (err, result) {
+      cc.issueAsset({ amount: 36, issueAddress: issueAddress, fee: 1000, utxos: utxos }, function (err, result) {
         assert(err)
         assert.equal(err.name, 'NotEnoughFundsError')
         done()
@@ -196,7 +186,11 @@ describe('Test ColoredCoins SDK', function () {
     var args = {
       issueAddress: cc.hdwallet.getAddress(0, 0),
       amount: 36,
-      fee: 1000
+      fee: 1000,
+      metadata: {
+        assetName: expectedAssetName
+      },
+      financeChangeAddress: cc.hdwallet.getAddress(0, 0)
     }
     cc.issueAsset(args, function (err, result) {
       assert.ifError(err)
@@ -204,6 +198,7 @@ describe('Test ColoredCoins SDK', function () {
       assert(result.txid)
       assert(result.assetId)
       assetId = result.assetId
+      issuanceUtxo = result.txid + ":2"
       setTimeout(function(){
         done();
       }, 5000); // allow full node time to process transaction
@@ -221,7 +216,8 @@ describe('Test ColoredCoins SDK', function () {
           amount: 12
         }
       ],
-      fee: 1000
+      fee: 1000,
+      financeChangeAddress: cc.hdwallet.getAddress(0, 0)
     }
     cc.sendAsset(args, function (err, result) {
       assert.ifError(err)
@@ -243,12 +239,25 @@ describe('Test ColoredCoins SDK', function () {
           amount: 3
         }
       ],
-      fee: 1000
+      fee: 1000,
+      financeChangeAddress: cc.hdwallet.getAddress(0, 0)
     }
     cc.burnAsset(args, function (err, result) {
       assert.ifError(err)
       assert(result.txHex)
       assert(result.txid)
+      done()
+    })
+  })
+
+  it('should get assetmetadata', function (done) {
+    this.timeout(15000)
+    cc.getAssetMetadata(assetId, issuanceUtxo, function (err, ans) {
+      assert.ifError(err)
+      assert.equal(ans.assetId, assetId)
+      assert.equal(ans.assetName, expectedAssetName)
+      assert.equal(typeof ans.issuanceTxid, 'string')
+      assert(ans.issuanceTxid.length)
       done()
     })
   })
@@ -345,7 +354,8 @@ describe('Test ColoredCoins SDK', function () {
     var args = {
       amount: 36,
       issueAddress: cc.hdwallet.getAddress(0, 0),
-      fee: 1000
+      fee: 1000,
+      financeChangeAddress: cc.hdwallet.getAddress(0, 0)
     }
     cc.issueAsset(args, function (err, ans) {
       assert.ifError(err)
@@ -368,7 +378,8 @@ describe('Test ColoredCoins SDK', function () {
     var args = {
       amount: 36,
       issueAddress: cc.hdwallet.getAddress(0, 0),
-      fee: 1000
+      fee: 1000,
+      financeChangeAddress: cc.hdwallet.getAddress(0, 0)
     }
     cc.issueAsset(args, function (err, ans) {
       assert.ifError(err)
@@ -391,7 +402,8 @@ describe('Test ColoredCoins SDK', function () {
     var args = {
       amount: 36,
       issueAddress: cc.hdwallet.getAddress(0, 0),
-      fee: 1000
+      fee: 1000,
+      financeChangeAddress: cc.hdwallet.getAddress(0, 0)
     }
     cc.issueAsset(args, function (err, ans) {
       assert.ifError(err)
@@ -414,7 +426,8 @@ describe('Test ColoredCoins SDK', function () {
     var args = {
       amount: 36,
       issueAddress: cc.hdwallet.getAddress(0, 0),
-      fee: 1000
+      fee: 1000,
+      financeChangeAddress: cc.hdwallet.getAddress(0, 0)
     }
     cc.issueAsset(args, function (err, ans) {
       assert.ifError(err)
