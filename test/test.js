@@ -198,10 +198,8 @@ describe('Test ColoredCoins SDK', function () {
       assert(result.txid)
       assert(result.assetId)
       assetId = result.assetId
-      issuanceUtxo = result.txid + ":2"
-      setTimeout(function(){
-        done();
-      }, 5000); // allow full node time to process transaction
+      issuanceUtxo = result.txid + ":" + result.coloredOutputIndexes[0]
+      done()
     })
   })
 
@@ -223,9 +221,7 @@ describe('Test ColoredCoins SDK', function () {
       assert.ifError(err)
       assert(result.txHex)
       assert(result.txid)
-      setTimeout(function(){
-        done();
-      }, 5000); // allow full node time to process transaction
+      done()
     })
   })
 
