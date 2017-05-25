@@ -2,15 +2,22 @@ var util = require('util')
 var async = require('async')
 var events = require('events')
 var request = require('request')
+var debug = require('debug')('coloredcoins-sdk')
 var HDWallet = require('hdwallet')
 var ColoredCoinsRpc = require('coloredcoins-rpc')
 var BlockExplorerRpc = require('blockexplorer-rpc')
+var ColoredCoinsBuilder = require('cc-transaction-builder')
+var BlockExplorer = require('../lib/block_explorer')
+var FullNode = require('../lib/full_node')
+var MetadataServer = require('../lib/metadata_server')
 
 var mainnetColoredCoinsHost = 'https://api.coloredcoins.org/v3'
 var testnetColoredCoinsHost = 'https://testnet.api.coloredcoins.org/v3'
 
 var mainnetBlockExplorerHost = 'https://explorer.coloredcoins.org'
 var testnetBlockExplorerHost = 'https://testnet.explorer.coloredcoins.org'
+
+var metadataServerHost = 'https://prod-metadata.coloredcoins.org'
 
 var verifierPath = 'https://www.coloredcoins.org/explorer/verify/api.php'
 
@@ -25,7 +32,17 @@ var ColoredCoins = function (settings) {
     settings.blockExplorerHost = settings.blockExplorerHost || mainnetBlockExplorerHost
   }
   self.cc = new ColoredCoinsRpc(settings.coloredCoinsHost)
+  self.ccb = new ColoredCoinsBuilder({ network: settings.network })
   self.blockexplorer = new BlockExplorerRpc(settings.blockExplorerHost)
+  if (settings.fullNodeHost) {
+    self.chainAdapter = new FullNode({ host: settings.fullNodeHost })
+    self.usingFullNode = true
+  } else {
+    self.chainAdapter = new BlockExplorer({ host: settings.blockExplorerHost })
+  }
+
+  self.metadataServer = new MetadataServer({ host: settings.metadataServerHost || metadataServerHost })
+
   self.redisPort = settings.redisPort || 6379
   self.redisHost = settings.redisHost || '127.0.0.1'
   self.redisUrl = settings.redisUrl
@@ -35,6 +52,8 @@ var ColoredCoins = function (settings) {
   self.allTransactions = settings.allTransactions || false
   self.events = settings.events || false
   self.addresses = []
+
+  self.reindex = !!settings.reindex || false
 }
 
 util.inherits(ColoredCoins, events.EventEmitter)
@@ -49,7 +68,7 @@ ColoredCoins.prototype.init = function (cb) {
   var self = this
 
   function handleError (err) {
-    self.emit('error')
+    self.emit('error', err)
     if (cb) return cb(err)
   }
 
@@ -59,38 +78,67 @@ ColoredCoins.prototype.init = function (cb) {
     self.hdwallet.on('registerAddress', function (address) {
       if (!~self.addresses.indexOf(address)) {
         self.addresses.push(address)
+        self.chainAdapter.importAddresses([address], false, function(err) {
+          if (err) {
+            return handleError(err)
+          }
+        })
       }
     })
     self.hdwallet.getAddresses(function (err, addresses) {
       if (err) return handleError
       self.addresses = addresses
-      self.emit('connect')
-      if (cb) cb()
+      self.chainAdapter.importAddresses(addresses, self.reindex, function(err) {
+        if (err) {
+          return handleError(err)
+        }
+      })
+      self.chainAdapter.onConnect(self.blockexplorer, function() {
+        self.emit('connect')
+        if (cb) cb()
+      })
     })
   })
 }
 
 ColoredCoins.prototype.buildTransaction = function (type, ccArgs, callback) {
+  var self = this
+
   var functionName
-  if (type === 'send') {
-    functionName = 'sendasset'
-  } else if (type === 'burn') {
-    functionName = 'burnasset'
-  } else if (type === 'issue') {
-    functionName = 'issue'
-  } else {
-    return callback('Unknown type.')
-  }
+
   ccArgs.flags = ccArgs.flags || {}
   ccArgs.flags.injectPreviousOutput = true
+  ccArgs.financeChangeAddress = ccArgs.financeChangeAddress || self.hdwallet.getAddress()
   ccArgs.flags.splitChange = typeof ccArgs.flags.splitChange !== 'undefined' ? ccArgs.flags.splitChange : true
-  this.cc.post(functionName, ccArgs, callback)
+
+  self.metadataServer.upload(ccArgs, function(err, ccArgs) {
+    if(err) return callback(err)
+    var tx
+    try {
+      if (type === 'send') {
+        tx = self.ccb.buildSendTransaction(ccArgs)
+      } else if (type === 'burn') {
+        tx = self.ccb.buildBurnTransaction(ccArgs)
+      } else if (type === 'issue') {
+        tx = self.ccb.buildIssueTransaction(ccArgs)
+      } else {
+        return callback('Unknown type.')
+      }
+    } catch (err) {
+      return callback(err)
+    }
+    tx.sha1 = ccArgs.sha1
+    return callback(null, tx)
+  })
 }
 
 ColoredCoins.prototype.signAndTransmit = function (assetInfo, callback) {
   var self = this
   async.waterfall([
-    function (cb) {
+    function(cb) {
+      self.metadataServer.seed(assetInfo.sha1, cb)
+    },
+    function (data, cb) {
       self.sign(assetInfo.txHex, cb)
     },
     function (signedTxHex, cb) {
@@ -110,7 +158,7 @@ ColoredCoins.prototype.sign = function (txHex, callback) {
 }
 
 ColoredCoins.prototype.transmit = function (signedTxHex, callback) {
-  this.cc.post('broadcast', {txHex: signedTxHex}, callback)
+  this.chainAdapter.transmit(signedTxHex, callback)
 }
 
 ColoredCoins.prototype.issueAsset = function (args, callback) {
@@ -118,17 +166,25 @@ ColoredCoins.prototype.issueAsset = function (args, callback) {
 
   var transmit = args.transmit !== false
   args.transfer = args.transfer || []
+  if (!args.issueAddress) {
+    return callback(new Error('Must have "issueAddress"'))
+  }
   var hdwallet = self.hdwallet
+
+  var assetInformation
 
   async.waterfall([
     function (cb) {
-      if (!args.issueAddress) return cb(null, hdwallet.getPrivateKey(args.accountIndex))
-      hdwallet.getAddressPrivateKey(args.issueAddress, cb)
+      self._getUtxosForAddresses([args.issueAddress], function(err, utxos) {
+        if (err) {
+          return cb(err)
+        } else {
+          args.utxos = utxos
+          return cb()
+        }
+      })
     },
-    function (priv, cb) {
-      var privateKey = priv
-      var publicKey = privateKey.pub
-      args.issueAddress = args.issueAddress || publicKey.getAddress(self.network).toString()
+    function (cb) {
       self.buildTransaction('issue', args, cb)
     },
     function (assetInfo, cb) {
@@ -137,6 +193,7 @@ ColoredCoins.prototype.issueAsset = function (args, callback) {
       if (!transmit) {
         return self.sign(assetInfo.txHex, cb)
       }
+      assetInformation = assetInfo
       self.signAndTransmit(assetInfo, cb)
     },
     function (res, cb) {
@@ -145,6 +202,8 @@ ColoredCoins.prototype.issueAsset = function (args, callback) {
       }
       res.receivingAddresses = args.transfer
       res.issueAddress = args.issueAddress
+      res.assetId = assetInformation.assetId
+      res.txHex = assetInformation.txHex
       cb(null, res)
     }
   ],
@@ -156,9 +215,46 @@ ColoredCoins.prototype.sendAsset = function (args, callback) {
   var transmit = args.transmit !== false
   async.waterfall([
     function (cb) {
-      if ((!args.from || !Array.isArray(args.from) || !args.from.length) && (!args.sendutxo || !Array.isArray(args.sendutxo) || !args.sendutxo.length)) {
-        return cb('Should have from as array of addresses or sendutxo as array of utxos.')
+      if (args.from && Array.isArray(args.from) && args.from.length) {
+        self._getUtxosForAddresses(args.from, function(err, utxos) {
+          if (err) {
+            return cb(err)
+          } else {
+            delete args.from
+            args.utxos = utxos
+            return cb()
+          }
+        })
+      } else if (args.sendutxo && Array.isArray(args.sendutxo) && args.sendutxo.length) {
+        var objectUtxos = args.sendutxo.filter(utxo => typeof utxo === 'object')
+        if (objectUtxos.length === args.sendutxo.length) {
+          // 'sendutxo' is given as a UTXO object array, no need to fetch by txid:index
+          args.utxos = args.sendutxo
+          delete args.sendutxo
+          return cb()
+        }
+        var stringUtxos = args.sendutxo.filter(utxo => typeof utxo === 'string')
+        debug('stringUtxos', stringUtxos)
+        var txidsIndexes = stringUtxos.map(utxo => {
+          var utxoParts = utxo.split(':')
+          return {
+            txid: utxoParts[0],
+            index: utxoParts[1]
+          }
+        })
+        debug('txidsIndexes', txidsIndexes)
+        self.chainAdapter.getUtxos(txidsIndexes, function (err, populatedObjectUtxos) {
+          if (err) return cb(err)
+          debug('populatedObjectUtxos', populatedObjectUtxos)
+          args.utxos = objectUtxos.concat(populatedObjectUtxos)
+          delete args.sendutxo
+          return cb()
+        })
+      } else {
+        return cb('Must have "from" as array of addresses or "sendutxo" as array of utxos.')
       }
+    },
+    function (cb) {
       self.buildTransaction('send', args, cb)
     },
     function (assetInfo, cb) {
@@ -184,9 +280,25 @@ ColoredCoins.prototype.burnAsset = function (args, callback) {
 
   async.waterfall([
     function (cb) {
-      if ((!args.from || !Array.isArray(args.from) || !args.from.length) && (!args.sendutxo || !Array.isArray(args.sendutxo) || !args.sendutxo.length)) {
+      if (args.from && Array.isArray(args.from) && args.from.length) {
+        self._getUtxosForAddresses(args.from, function(err, utxos) {
+          if (err) {
+            return cb(err)
+          } else {
+            delete args.from
+            args.utxos = utxos
+            return cb()
+          }
+        })
+      } else if (args.sendutxo && Array.isArray(args.sendutxo) && args.sendutxo.length) {
+        args.utxos = args.sendutxo
+        delete args.sendutxo
+        return cb()
+      } else {
         return cb('Should have from as array of addresses or sendutxo as array of utxos.')
       }
+    },
+    function (cb) {
       self.buildTransaction('burn', args, cb)
     },
     function (assetInfo, cb) {
@@ -207,29 +319,17 @@ ColoredCoins.prototype.burnAsset = function (args, callback) {
 
 ColoredCoins.prototype.getUtxos = function (callback) {
   var self = this
-  async.waterfall([
-    function (cb) {
-      self.hdwallet.getAddresses(cb)
-    },
-    function (addresses, cb) {
-      self.blockexplorer.post('getaddressesutxos', {addresses: addresses}, cb)
+  self.hdwallet.getAddresses(function(err, addresses) {
+    if (err) {
+      callback(err)
+    } else {
+      self._getUtxosForAddresses(addresses, callback)
     }
-  ],
-  function (err, addressesUtxos) {
-    if (err) return callback(err)
-    var utxosTxidsAndIndexes = {}
-    var utxos = []
-    addressesUtxos.forEach(addressUtxos => {
-      addressUtxos.utxos.forEach(utxo => {
-        // ensure no duplications (multisig utxos may appear in more than one address-utxos pair)
-        if (!utxosTxidsAndIndexes[utxo.txid + ':' + utxo.index]) {
-          utxos.push(utxo)
-          utxosTxidsAndIndexes[utxo.txid + ':' + utxo.index] = true
-        }
-      })
-    })
-    callback(null, utxos)
   })
+}
+
+ColoredCoins.prototype._getUtxosForAddresses = function (addresses, callback) {
+  this.chainAdapter.getAddressesUtxos(addresses, callback)
 }
 
 ColoredCoins.prototype.getAssets = function (callback) {
@@ -277,7 +377,7 @@ ColoredCoins.prototype.getTransactions = function (addresses, callback) {
 }
 
 ColoredCoins.prototype.getTransactionsFromAddresses = function (addresses, callback) {
-  this.blockexplorer.post('getaddressesinfowithtransactions', {addresses: addresses}, function (err, addressesInfos) {
+  this.chainAdapter.getAddressesTransactions(addresses, function (err, addressesInfos) {
     if (err) return callback(err)
     var txids = {}
     var transactions = []
@@ -394,39 +494,37 @@ ColoredCoins.prototype.on = function (eventKey, callback) {
       return this.onRevertedTransaction(callback)
     case 'revertedCCTransaction':
       return this.onRevertedCCTransaction(callback)
+    case 'scanProgress':
+      return this.onProgress(callback)
     default:
       return this.blockexplorer.on.call(this, eventKey, callback)
   }
 }
 
 ColoredCoins.prototype.onRevertedTransaction = function (callback) {
-  this.blockexplorer.on('revertedtransaction', function (data) {
-    callback(data.revertedtransaction)
-  })
-  this.blockexplorer.join('revertedtransaction')
+  this.chainAdapter.onRevertedTransaction(callback)
+  this.chainAdapter.joinRevertedTransaction()
 }
 
 ColoredCoins.prototype.onRevertedCCTransaction = function (callback) {
-  this.blockexplorer.on('revertedcctransaction', function (data) {
-    callback(data.revertedcctransaction)
-  })
-  this.blockexplorer.join('revertedcctransaction')
+  this.chainAdapter.onRevertedCCTransaction(callback)
+  this.chainAdapter.joinRevertedCCTransaction()
 }
 
 ColoredCoins.prototype.onNewTransaction = function (callback) {
   var self = this
 
   if (!self.events) return
-  if (self.eventsSecure || self.allTransactions) {
-    self.blockexplorer.on('newtransaction', function (data) {
-      if (isLocalTransaction(self.addresses, data.newtransaction)) {
+  if (self.usingFullNode || self.eventsSecure || self.allTransactions) {
+    self.chainAdapter.onNewTransaction(function (data) {
+      if (isLocalTransaction(self.addresses, data)) {
         self.hdwallet.discover()
-        callback(data.newtransaction)
+        callback(data)
       } else if (self.allTransactions) {
-        callback(data.newtransaction)
+        callback(data)
       }
     })
-    self.blockexplorer.join('newtransaction')
+    this.chainAdapter.joinNewTransaction()
   } else {
     var addresses = []
     var transactions = []
@@ -443,16 +541,16 @@ ColoredCoins.prototype.onNewCCTransaction = function (callback) {
   var self = this
 
   if (!self.events) return false
-  if (self.eventsSecure || self.allTransactions) {
-    self.blockexplorer.on('newcctransaction', function (data) {
-      if (isLocalTransaction(self.addresses, data.newcctransaction)) {
+  if (self.usingFullNode || self.eventsSecure || self.allTransactions) {
+    self.chainAdapter.onNewCCTransaction(function (data) {
+      if (isLocalTransaction(self.addresses, data)) {
         self.hdwallet.discover()
-        callback(data.newcctransaction)
+        callback(data)
       } else if (self.allTransactions) {
-        callback(data.newcctransaction)
+        callback(data)
       }
     })
-    self.blockexplorer.join('newcctransaction')
+    this.chainAdapter.joinNewCCTransaction()
   } else {
     self.onNewTransaction(function (transaction) {
       if (transaction.colored) {
@@ -460,6 +558,10 @@ ColoredCoins.prototype.onNewCCTransaction = function (callback) {
       }
     })
   }
+}
+
+ColoredCoins.prototype.onProgress = function(callback) {
+  this.chainAdapter.onProgress(this.blockexplorer, callback)
 }
 
 var isLocalTransaction = function (addresses, transaction) {
@@ -549,6 +651,7 @@ ColoredCoins.prototype.getIssuedAssetsFromTransactions = function (addresses, tr
       if (!transaction.vin || !transaction.vin.length || !transaction.vin[0].previousOutput || !transaction.vin[0].previousOutput.addresses || !transaction.vin[0].previousOutput.addresses.length) {
         return
       }
+
       var address = transaction.vin[0].previousOutput.addresses[0]
       if (~addresses.indexOf(address)) {
         issuance.address = address
@@ -580,7 +683,10 @@ ColoredCoins.prototype.getIssuedAssets = function (transactions, callback) {
 }
 
 ColoredCoins.prototype.getAddressInfo = function (address, cb) {
-  this.cc.get('addressinfo', [address], cb)
+  this._getUtxosForAddresses([address], function(err, data) {
+    if (err) return cb(err)
+    cb(null, { 'address': address, 'utxos': data})
+  })
 }
 
 ColoredCoins.prototype.getStakeHolders = function (assetId, numConfirmations, cb) {
@@ -588,7 +694,7 @@ ColoredCoins.prototype.getStakeHolders = function (assetId, numConfirmations, cb
     cb = numConfirmations
     numConfirmations = 0
   }
-  this.cc.get('stakeholders', [assetId, numConfirmations], cb)
+  this.blockexplorer.get('getassetholders', { 'assetId': assetId, 'confirmations': numConfirmations }, cb)
 }
 
 ColoredCoins.prototype.verifyIssuer = function (assetId, json, cb) {
